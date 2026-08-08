@@ -207,10 +207,11 @@ static const struct hid_ops ops = {
     .set_report = set_report_cb,
 };
 
-static int zmk_usb_hid_send_report(const uint8_t *report, size_t len) {
+static int zmk_usb_hid_send_report_wakeup(const uint8_t *report, size_t len, bool wakeup_host) {
     switch (zmk_usb_get_status()) {
     case USB_DC_SUSPEND:
-        return usb_wakeup_request();
+        // Only user input should resume a suspended host.
+        return wakeup_host ? usb_wakeup_request() : -EAGAIN;
     case USB_DC_ERROR:
     case USB_DC_RESET:
     case USB_DC_DISCONNECTED:
@@ -226,6 +227,10 @@ static int zmk_usb_hid_send_report(const uint8_t *report, size_t len) {
 
         return err;
     }
+}
+
+static int zmk_usb_hid_send_report(const uint8_t *report, size_t len) {
+    return zmk_usb_hid_send_report_wakeup(report, len, true);
 }
 
 int zmk_usb_hid_send_keyboard_report(void) {
@@ -270,13 +275,11 @@ int zmk_usb_hid_send_battery_report_by_index(uint8_t battery_index) {
     if (report == NULL) {
         return -EINVAL;
     }
-    return zmk_usb_hid_send_report((uint8_t *)report, sizeof(*report));
+    return zmk_usb_hid_send_report_wakeup((uint8_t *)report, sizeof(*report), false);
 }
 
 // Legacy function for backwards compatibility - sends first battery
-int zmk_usb_hid_send_battery_report() {
-    return zmk_usb_hid_send_battery_report_by_index(0);
-}
+int zmk_usb_hid_send_battery_report() { return zmk_usb_hid_send_battery_report_by_index(0); }
 #endif // IS_ENABLED(CONFIG_ZMK_BATTERY_REPORTING_USB)
 
 static int zmk_usb_hid_init(void) {
